@@ -1,5 +1,6 @@
 ﻿using System.Linq;
 using UserManagement.Services.Domain.Interfaces;
+using UserManagement.Services.Domain.Models;
 using UserManagement.Web.Models.Users;
 
 namespace UserManagement.WebMS.Controllers;
@@ -11,9 +12,14 @@ public class UsersController : Controller
     public UsersController(IUserService userService) => _userService = userService;
 
     [HttpGet]
-    public ViewResult List()
+    public IActionResult List([FromQuery] UserFilter filter)
     {
-        var items = _userService.GetAll().Select(p => new UserListItemViewModel
+        if (!ModelState.IsValid)
+        {
+            return RedirectToAction(nameof(List));
+        }
+
+        var items = _userService.Filter(filter).Select(p => new UserListItemViewModel
         {
             Id = p.Id,
             Forename = p.Forename,
