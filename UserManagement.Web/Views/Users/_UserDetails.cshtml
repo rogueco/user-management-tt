@@ -1,0 +1,23 @@
+@using System.Globalization
+@using UserManagement.Web.Models.Users
+@model UserViewModel
+
+<dl class="row">
+    <dt class="col-sm-3">Id</dt>
+    <dd class="col-sm-9">@Model.Id</dd>
+
+    <dt class="col-sm-3">Forename</dt>
+    <dd class="col-sm-9">@Model.Forename</dd>
+
+    <dt class="col-sm-3">Surname</dt>
+    <dd class="col-sm-9">@Model.Surname</dd>
+
+    <dt class="col-sm-3">Email</dt>
+    <dd class="col-sm-9">@Model.Email</dd>
+
+    <dt class="col-sm-3">Date of Birth</dt>
+    <dd class="col-sm-9">@Model.DateOfBirth.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)</dd>
+
+    <dt class="col-sm-3">Account Active</dt>
+    <dd class="col-sm-9">@(Model.IsActive ? "Yes" : "No")</dd>
+</dl>

@@ -1,5 +1,8 @@
 ﻿@using System.Globalization
 @model UserManagement.Web.Models.Users.UserListViewModel
+@{
+    ViewData["Title"] = "Users";
+}
 
 <h2>User List</h2>
 
@@ -11,7 +14,7 @@
                 <th>Forename</th>
                 <th>Surname</th>
                 <th>Email</th>
-                <th>Date Of Birth</th>
+                <th>Date of Birth</th>
                 <th>Account Active</th>
                 <th style="width: 1px;"></th>
             </tr>
@@ -40,13 +43,13 @@
                     </td>
                     <td>
                         <div class="dropdown">
-                            <button type="button" class="btn btn-default dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" id="btnToggleActions">
+                            <button type="button" class="btn btn-default dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                                 Actions
                             </button>
-                            <ul class="dropdown-menu" aria-labelledby="btnToggleActions">
-                                <li><a class="dropdown-item" href="#">View</a></li>
-                                <li><a class="dropdown-item" href="#">Edit</a></li>
-                                <li><a class="dropdown-item" href="#">Delete</a></li>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" asp-action="Details" asp-route-id="@item.Id">View</a></li>
+                                <li><a class="dropdown-item" asp-action="Edit" asp-route-id="@item.Id">Edit</a></li>
+                                <li><a class="dropdown-item" asp-action="Delete" asp-route-id="@item.Id">Delete</a></li>
                             </ul>
                         </div>
                     </td>
@@ -63,8 +66,7 @@
         <a asp-controller="Users" asp-action="List" asp-route-isActive="false" class="btn btn-default">Non Active</a>
     </div>
 
-    <a href="#" class="btn btn-primary float-end">
+    <a asp-controller="Users" asp-action="Add" class="btn btn-primary float-end">
         Add User
     </a>
 </div>
-

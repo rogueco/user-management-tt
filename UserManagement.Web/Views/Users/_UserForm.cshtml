@@ -1,0 +1,33 @@
+@using UserManagement.Web.Models.Users
+@model UserFormViewModel
+
+<div asp-validation-summary="ModelOnly" class="text-danger" role="alert"></div>
+
+<div class="mb-3">
+    <label asp-for="Forename" class="form-label"></label>
+    <input asp-for="Forename" class="form-control" />
+    <span asp-validation-for="Forename" class="text-danger"></span>
+</div>
+
+<div class="mb-3">
+    <label asp-for="Surname" class="form-label"></label>
+    <input asp-for="Surname" class="form-control" />
+    <span asp-validation-for="Surname" class="text-danger"></span>
+</div>
+
+<div class="mb-3">
+    <label asp-for="Email" class="form-label"></label>
+    <input asp-for="Email" class="form-control" />
+    <span asp-validation-for="Email" class="text-danger"></span>
+</div>
+
+<div class="mb-3">
+    <label asp-for="DateOfBirth" class="form-label"></label>
+    <input asp-for="DateOfBirth" class="form-control" />
+    <span asp-validation-for="DateOfBirth" class="text-danger"></span>
+</div>
+
+<div class="mb-3 form-check">
+    <input asp-for="IsActive" class="form-check-input" />
+    <label asp-for="IsActive" class="form-check-label"></label>
+</div>

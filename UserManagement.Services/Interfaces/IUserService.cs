@@ -13,4 +13,12 @@ public interface IUserService
     /// <returns>The users matching every set property on <paramref name="filter"/></returns>
     IEnumerable<User> Filter(UserFilter filter);
     IEnumerable<User> GetAll();
+
+    /// <summary>
+    /// Return the user with the given id, or null if none exists
+    /// </summary>
+    User? GetById(long id);
+    void Create(User user);
+    void Update(User user);
+    void Delete(User user);
 }
