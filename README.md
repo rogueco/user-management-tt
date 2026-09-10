@@ -1,6 +1,7 @@
 # User Management
 
-Tasks 1 to 4 were completed on the supplied MVC application; that version is in the git history (tag `tasks-1-4`).
+Tasks 1 to 4 were completed on the supplied MVC application; that work is on the
+[`tasks_1-4` branch](https://github.com/rogueco/user-management-tt/tree/tasks_1-4).
 Task 5 re-implements it as a Blazor WebAssembly client over a versioned REST API, on a layered solution under
 `src/`, backed by PostgreSQL. Task 6 adds Redis caching, a RabbitMQ-driven worker for CSV imports, CI with a
 coverage floor, and CD from a release branch.
@@ -26,6 +27,12 @@ Once `make up` returns the API is healthy, migrated and seeded.
 
 Other targets: `make logs`, `make scale n=3` (more workers), `make psql`, `make redis`, `make test`, `make coverage`,
 `make migration name=...`.
+
+To see the queue and worker in action, open the Imports page, download one of the sample CSVs it links to
+(10 users, or 500 users, both under `src/UserManagement.Blazor/wwwroot/samples`) and upload it. The job is
+accepted immediately, the `ImportRequested` queue in RabbitMQ management shows the message being consumed,
+`make worker-logs` shows the worker processing it, and the page polls until the job completes. Rows that fail
+validation are listed against their row number; both users and log entries then show the imported users.
 
 To run from source you need the .NET 10 SDK (`global.json` pins it). `dotnet run --project src/UserManagement.API`
 runs against the compose Postgres; without Redis or RabbitMQ configured the cache is in-process and imports run
@@ -62,6 +69,16 @@ on an in-memory bus inside the API, which is also how the tests run.
 Coverage leaves out the Blazor client, the worker host, EF migrations and DI wiring marked `ExcludeFromCodeCoverage`
 (`tests/coverlet.runsettings`). `make coverage` produces the same numbers locally with an HTML report.
 
+## Background
+
+- I did this exercise six years ago: <https://github.com/rogueco/infloTech>, in React rather than Blazor because
+  that was the Inflo stack at the time. You'll see similarities.
+- The structure draws on architectures I've run in production before. Some are public, like
+  <https://github.com/rogueco/Dotnet5.Docker.Templates.PostGresMicroservice>; most are private. Parts of this code
+  are adapted from side projects that are live today in .NET, Go and Rust.
+- The engineers behind those ideas: William Kennedy (Ardan Labs, Go), Michael Stack, Robert C. Martin, Dave Thomas
+  and Andy Hunt, Jason Taylor, Steve Smith (Ardalis), and Nick Chapsas.
+
 ## Decisions worth knowing
 
 - Services return a `ServiceResult` and one extension, `ServiceResultToActionResult`, maps it to a status code, so
@@ -76,17 +93,30 @@ Coverage leaves out the Blazor client, the worker host, EF migrations and DI wir
   so writes made by the API are visible at once and writes made by the worker are visible within ten seconds.
   A message-based backplane would remove that window and was deliberately not built.
 
+## Taking it further
+
+If this were going to production I would change a few things, depending on how the service grew:
+
+- Infrastructure as code with Terraform or OpenTofu, targeting a named environment, and deploy to Docker Swarm,
+  which I prefer over Kubernetes for a service of this size.
+- Dapper instead of Entity Framework, with hand-written SQL migrations rather than code-first, and indexes driven
+  by the real query patterns (the log table has `user_id` and `timestamp` indexes today; `users` would want `email`
+  and `is_active`).
+- Observability once it runs as a standalone service: Kibana for logs and Grafana for internal dashboards.
+- Swap RabbitMQ for the cloud's managed bus, Azure Service Bus or SQS/SNS on AWS, depending on what the messaging
+  needed to do. MassTransit supports both, so the consumers and the outbox stay as they are.
+
 ---
 
 # User Management Technical Exercise
 
 The exercise is an ASP.NET Core web application backed by Entity Framework Core, which faciliates management of some fictional users.
-We recommend that you use [Visual Studio (Community Edition)](https://visualstudio.microsoft.com/downloads) or [Visual Studio Code](https://code.visualstudio.com/Download) to run and modify the application. 
+We recommend that you use [Visual Studio (Community Edition)](https://visualstudio.microsoft.com/downloads) or [Visual Studio Code](https://code.visualstudio.com/Download) to run and modify the application.
 
 **The application uses an in-memory database, so changes will not be persisted between executions.**
 
 ## The Exercise
-Complete as many of the tasks below as you feel comfortable with. These are split into 4 levels of difficulty 
+Complete as many of the tasks below as you feel comfortable with. These are split into 4 levels of difficulty
 * **Standard** - Functionality that is common when working as a web developer
 * **Advanced** - Slightly more technical tasks and problem solving
 * **Expert** - Tasks with a higher level of problem solving and architecture needed
@@ -107,7 +137,7 @@ Add a new property to the `User` class in the system called `DateOfBirth` which 
 Create the code and UI flows for the following actions
 * **Add** – A screen that allows you to create a new user and return to the list
 * **View** - A screen that displays the information about a user
-* **Edit** – A screen that allows you to edit a selected user from the list  
+* **Edit** – A screen that allows you to edit a selected user from the list
 * **Delete** – A screen that allows you to delete a selected user from the list
 
 Each of these screens should contain appropriate data validation, which is communicated to the end user.
@@ -115,7 +145,7 @@ Each of these screens should contain appropriate data validation, which is commu
 ### 4. Data Logging (Advanced)
 
 Extend the system to capture log information regarding primary actions performed on each user in the app.
-* In the **View** screen there should be a list of all actions that have been performed against that user. 
+* In the **View** screen there should be a list of all actions that have been performed against that user.
 * There should be a new **Logs** page, containing a list of log entries across the application.
 * In the Logs page, the user should be able to click into each entry to see more detail about it.
 * In the Logs page, think about how you can provide a good user experience - even when there are many log entries.
