@@ -2,6 +2,7 @@
 using UserManagement.Models;
 using UserManagement.Services.Domain.Interfaces;
 using UserManagement.Services.Domain.Models;
+using UserManagement.Web.Models.Logs;
 using UserManagement.Web.Models.Users;
 
 namespace UserManagement.WebMS.Controllers;
@@ -9,8 +10,16 @@ namespace UserManagement.WebMS.Controllers;
 [Route("users")]
 public class UsersController : Controller
 {
+    private const int RecentLogCount = 10;
+
     private readonly IUserService _userService;
-    public UsersController(IUserService userService) => _userService = userService;
+    private readonly IUserLogService _userLogService;
+
+    public UsersController(IUserService userService, IUserLogService userLogService)
+    {
+        _userService = userService;
+        _userLogService = userLogService;
+    }
 
     [HttpGet]
     public IActionResult List([FromQuery] UserFilter filter)
@@ -57,7 +66,14 @@ public class UsersController : Controller
             return NotFound();
         }
 
-        return View(UserViewModel.FromUser(user));
+        var logs = _userLogService.Filter(new UserLogFilter { UserId = id }, 1, RecentLogCount);
+
+        return View(new UserDetailsViewModel
+        {
+            User = UserViewModel.FromUser(user),
+            Logs = logs.Items.Select(LogViewModel.FromLog).ToList(),
+            TotalLogs = logs.TotalCount
+        });
     }
 
     [HttpGet("{id:long}/edit")]
@@ -87,10 +103,11 @@ public class UsersController : Controller
             return View(form);
         }
 
-        form.ApplyTo(user);
-        _userService.Update(user);
+        var updated = new User { Id = id };
+        form.ApplyTo(updated);
+        _userService.Update(updated);
 
-        TempData["Message"] = $"{user.Forename} {user.Surname} was updated.";
+        TempData["Message"] = $"{updated.Forename} {updated.Surname} was updated.";
         return RedirectToAction(nameof(List));
     }
 

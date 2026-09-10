@@ -10,7 +10,13 @@ namespace UserManagement.Services.Domain.Implementations;
 public class UserService : IUserService
 {
     private readonly IDataContext _dataAccess;
-    public UserService(IDataContext dataAccess) => _dataAccess = dataAccess;
+    private readonly IUserLogService _userLogService;
+
+    public UserService(IDataContext dataAccess, IUserLogService userLogService)
+    {
+        _dataAccess = dataAccess;
+        _userLogService = userLogService;
+    }
 
     /// <summary>
     /// Return users matching filter. Unset properties are ignored
@@ -33,9 +39,30 @@ public class UserService : IUserService
 
     public User? GetById(long id) => _dataAccess.GetAll<User>().FirstOrDefault(u => u.Id == id);
 
-    public void Create(User user) => _dataAccess.Create(user);
+    public void Create(User user)
+    {
+        _dataAccess.Create(user);
+        _userLogService.Record(UserLogAction.Created, user, UserLogChange.Between(null, user));
+    }
 
-    public void Update(User user) => _dataAccess.Update(user);
+    public void Update(User user)
+    {
+        var existing = GetById(user.Id) ?? throw new KeyNotFoundException($"User {user.Id} does not exist.");
+        var changes = UserLogChange.Between(existing, user);
 
-    public void Delete(User user) => _dataAccess.Delete(user);
+        existing.Forename = user.Forename;
+        existing.Surname = user.Surname;
+        existing.Email = user.Email;
+        existing.DateOfBirth = user.DateOfBirth;
+        existing.IsActive = user.IsActive;
+
+        _dataAccess.Update(existing);
+        _userLogService.Record(UserLogAction.Updated, existing, changes);
+    }
+
+    public void Delete(User user)
+    {
+        _dataAccess.Delete(user);
+        _userLogService.Record(UserLogAction.Deleted, user, UserLogChange.Between(user, null));
+    }
 }

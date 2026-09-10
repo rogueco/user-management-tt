@@ -1,0 +1,45 @@
+@using UserManagement.Models
+@using UserManagement.Web.Models.Logs
+@model LogListViewModel
+@{
+    ViewData["Title"] = "Logs";
+}
+
+<h2>Logs</h2>
+
+<form asp-action="List" method="get" class="row g-2 align-items-end mb-3">
+    @if (Model.Filter.UserId is { } userId)
+    {
+        <input type="hidden" name="userId" value="@userId" />
+    }
+    <div class="col-auto">
+        <label for="actionType" class="form-label">Action</label>
+        <select id="actionType" name="actionType" class="form-select">
+            <option value="">All actions</option>
+            @foreach (var action in Enum.GetValues<UserLogAction>())
+            {
+                <option value="@action" selected="@(Model.Filter.ActionType == action)">@action</option>
+            }
+        </select>
+    </div>
+    <div class="col-auto">
+        <label for="search" class="form-label">Name or email</label>
+        <input type="search" id="search" name="search" class="form-control" value="@Model.Filter.Search" />
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-primary">Filter</button>
+        <a asp-action="List" class="btn btn-secondary">Clear</a>
+    </div>
+</form>
+
+<p class="text-muted">
+    @Model.TotalCount @(Model.TotalCount == 1 ? "entry" : "entries")
+    @if (Model.Filter.UserId is { } filteredUserId)
+    {
+        <text>for user @filteredUserId</text>
+    }
+</p>
+
+<partial name="_LogTable" model="Model.Items" />
+
+<partial name="_Pagination" model="Model" />

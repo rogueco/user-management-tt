@@ -12,9 +12,14 @@ public class DataContext : DbContext, IDataContext
     protected override void OnConfiguring(DbContextOptionsBuilder options)
         => options.UseInMemoryDatabase("UserManagement.Data.DataContext");
 
-    protected override void OnModelCreating(ModelBuilder model) => model.SeedUsers();
+    protected override void OnModelCreating(ModelBuilder model)
+    {
+        model.Entity<UserLog>().Property(l => l.Action).HasConversion<string>();
+        model.SeedUsers();
+    }
 
     public DbSet<User>? Users { get; set; }
+    public DbSet<UserLog>? UserLogs { get; set; }
 
     public IQueryable<TEntity> GetAll<TEntity>() where TEntity : class
         => base.Set<TEntity>();
