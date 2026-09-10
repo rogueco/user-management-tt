@@ -1,0 +1,33 @@
+@inject NavigationManager Navigation
+
+<MBDataTable Items="Items" Context="log" HasProgressBar="true" ShowProgress="Loading" GetKeysFunc="@(l => l.Id)">
+    <TableHeader>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">When</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Action</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">User</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Email</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col"></th>
+    </TableHeader>
+    <TableRow>
+        <td class="mdc-data-table__cell">@Formats.Timestamp(log.Timestamp)</td>
+        <td class="mdc-data-table__cell">@log.Action</td>
+        <td class="mdc-data-table__cell">@log.UserName</td>
+        <td class="mdc-data-table__cell">@log.Email</td>
+        <td class="mdc-data-table__cell actions">
+            <MBIconButton Icon="visibility" Tooltip="View entry" @onclick="@(() => Navigation.NavigateTo($"logs/{log.Id}"))" />
+        </td>
+    </TableRow>
+    <Paginator>
+        @Paginator
+    </Paginator>
+</MBDataTable>
+@if (!Loading && Items.Count == 0)
+{
+    <p class="empty">No log entries found.</p>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<LogDto> Items { get; set; } = [];
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public RenderFragment? Paginator { get; set; }
+}

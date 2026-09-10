@@ -1,0 +1,130 @@
+name: Deploy
+
+# Triggers:
+#   - push to release:    every merge to the release branch builds the images, publishes them
+#                         to GHCR and rolls them out to the host behind the production environment
+#   - workflow_dispatch:  manual button, same approval gate, for re-running a rollout
+#
+# Serialised so a second merge queues behind an in-flight rollout rather than racing it.
+on:
+  workflow_dispatch:
+  push:
+    branches: [release]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      repository: ${{ steps.meta.outputs.repository }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR paths must be lowercase; github.repository preserves case. Images carry the short
+      # SHA (immutable, traceable) and release-latest (a moving pointer for the compose file).
+      - name: Compute image names
+        id: meta
+        run: |
+          echo "repository=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/UserManagement.API/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.meta.outputs.repository }}/api:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.repository }}/api:release-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/UserManagement.Worker/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.meta.outputs.repository }}/worker:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.repository }}/worker:release-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to production host
+    needs: build-and-push
+    # Skipped until the repository variable DEPLOY_HOST is set; the images above are still published.
+    if: vars.DEPLOY_HOST != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The production environment is where required-reviewer approval and the deploy secrets live.
+    environment: production
+    env:
+      IMAGE_REPOSITORY: ${{ needs.build-and-push.outputs.repository }}
+      IMAGE_TAG: ${{ needs.build-and-push.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The host needs Docker with Compose v2, a login to GHCR for the private images, and a .env
+      # in DEPLOY_PATH with the real Postgres and RabbitMQ credentials.
+      - name: Deploy via SSH
+        env:
+          SSH_HOST: ${{ vars.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/usermanagement' }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "Deploying $IMAGE_REPOSITORY/{api,worker}:$IMAGE_TAG to $SSH_USER@$SSH_HOST:$DEPLOY_PATH"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new docker-compose.yml docker-compose.release.yml "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" \
+            "set -euo pipefail; cd '$DEPLOY_PATH'; export IMAGE_REPOSITORY='$IMAGE_REPOSITORY' IMAGE_TAG='$IMAGE_TAG'; docker compose -f docker-compose.yml -f docker-compose.release.yml pull api worker; docker compose -f docker-compose.yml -f docker-compose.release.yml up --detach --no-build --wait"
+
+      - name: Smoke test
+        if: ${{ vars.SMOKE_URL != '' }}
+        run: |
+          set -eu
+          URL="${{ vars.SMOKE_URL }}"
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS "$URL"; then
+              echo "Smoke test passed: $URL"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 6s"
+            sleep 6
+          done
+          echo "Smoke test failed after 10 attempts"
+          exit 1
+
+      - name: Summarise deploy
+        run: |
+          echo "### Production deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Images: \`$IMAGE_REPOSITORY/api:$IMAGE_TAG\`, \`$IMAGE_REPOSITORY/worker:$IMAGE_TAG\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Triggered by: ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"

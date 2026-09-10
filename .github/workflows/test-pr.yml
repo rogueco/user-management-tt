@@ -1,0 +1,213 @@
+name: Tests (PR)
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: test-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - run: dotnet restore UserManagement.sln
+
+      - run: dotnet build UserManagement.sln --no-restore --configuration Release
+
+      # Integration tests start Postgres and Redis through Testcontainers; the runner has Docker.
+      - name: Run tests with coverage
+        run: dotnet test UserManagement.sln --no-build --configuration Release --collect:"XPlat Code Coverage" --settings tests/coverlet.runsettings --results-directory TestResults --logger trx
+
+      - name: Upload coverage profile
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-profile
+          path: TestResults/**/coverage.cobertura.xml
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/*.trx
+
+  coverage:
+    name: Test coverage
+    needs: test
+    if: needs.test.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Download coverage profile
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-profile
+          path: TestResults
+
+      # What is left out of the metric lives in tests/coverlet.runsettings: the Blazor client, the
+      # worker host, EF migrations and anything marked ExcludeFromCodeCoverage (DI wiring, the DbContext).
+      - name: Merge reports
+        run: |
+          dotnet tool restore
+          dotnet reportgenerator -reports:"TestResults/**/coverage.cobertura.xml" -targetdir:TestResults/coverage -reporttypes:"Cobertura;TextSummary;MarkdownSummaryGithub" -verbosity:Warning
+          cat TestResults/coverage/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Parse coverage
+        id: coverage
+        run: |
+          TOTAL=$(grep 'Line coverage' TestResults/coverage/Summary.txt | awk '{print $3}')
+          echo "total=${TOTAL}" >> "$GITHUB_OUTPUT"
+
+          FLOOR=$(cat .github/coverage-floor.txt)
+          echo "floor=${FLOOR}" >> "$GITHUB_OUTPUT"
+
+          # The 20 least-covered classes, the actionable "add tests here" list.
+          SUMMARY=$(python3 .github/scripts/least-covered.py TestResults/coverage/Cobertura.xml)
+          {
+            echo "summary<<EOF"
+            echo "$SUMMARY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post coverage comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const total = '${{ steps.coverage.outputs.total }}';
+            const floor = '${{ steps.coverage.outputs.floor }}';
+            const summary = `${{ steps.coverage.outputs.summary }}`;
+            const marker = '<!-- coverage-report -->';
+
+            const body = [
+              marker,
+              `## Test Coverage: ${total} (floor: ${floor}%)`,
+              '',
+              '_Excludes the Blazor client, the worker host, EF migrations and DI wiring marked ExcludeFromCodeCoverage._',
+              '',
+              '<details>',
+              '<summary>20 least-covered classes</summary>',
+              '',
+              '```',
+              summary,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      # Ratchet: fail the PR when total coverage slips below the committed floor. The floor lives
+      # in .github/coverage-floor.txt and should be nudged up as coverage rises. Runs after the
+      # comment so the numbers are always posted, even on a failing check.
+      - name: Enforce coverage floor
+        run: |
+          FLOOR=$(cat .github/coverage-floor.txt)
+          TOTAL='${{ steps.coverage.outputs.total }}'
+          TOTAL_NUM=${TOTAL%\%}
+          echo "Total coverage: ${TOTAL_NUM}% (floor: ${FLOOR}%)"
+          if awk -v t="$TOTAL_NUM" -v f="$FLOOR" 'BEGIN { exit !(t + 0 < f + 0) }'; then
+            echo "::error::Coverage ${TOTAL_NUM}% is below the floor of ${FLOOR}%. Add tests to restore it, or lower the floor in .github/coverage-floor.txt within this PR and justify it in the description."
+            exit 1
+          fi
+          echo "Coverage floor satisfied."
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: TestResults/coverage
+          retention-days: 14
+
+  new-code-coverage:
+    name: New-code coverage
+    needs: test
+    if: needs.test.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      NEW_CODE_FLOOR: "80.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Reuses the profile produced by the test job rather than running the suite again.
+      - name: Download coverage profile
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-profile
+          path: TestResults
+
+      - name: Calculate changed-line coverage
+        env:
+          FLOOR: ${{ env.NEW_CODE_FLOOR }}
+        run: python3 .github/scripts/new-code-coverage.py "${{ github.event.pull_request.base.sha }}...HEAD"
+
+  images:
+    name: Build images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/UserManagement.API/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/UserManagement.Worker/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

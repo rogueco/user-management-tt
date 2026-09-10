@@ -1,0 +1,34 @@
+@inject UsersApi UsersApi
+@inject IMBToastService Toast
+
+<MBDialog @ref="_dialog" Title="Delete user">
+    <Body>
+        <p>Delete <strong>@_user?.Forename @_user?.Surname</strong>? This cannot be undone.</p>
+    </Body>
+    <Buttons>
+        <MBButton Label="Cancel" ButtonStyle="@MBButtonStyle.Text" DialogAction="cancel" />
+        <MBButton Label="Delete" ButtonStyle="@MBButtonStyle.ContainedRaised" DialogAction="delete" />
+    </Buttons>
+</MBDialog>
+
+@code {
+    private MBDialog _dialog = default!;
+    private UserDto? _user;
+
+    [Parameter] public EventCallback<UserDto> OnDeleted { get; set; }
+
+    public async Task ConfirmAsync(UserDto user)
+    {
+        _user = user;
+
+        if (await _dialog.ShowAsync() != "delete")
+        {
+            return;
+        }
+
+        var deleted = await UsersApi.DeleteAsync(user.Id);
+        Toast.ShowToast(deleted ? MBToastLevel.Success : MBToastLevel.Warning,
+            deleted ? $"{user.Forename} {user.Surname} was deleted." : "That user no longer exists.");
+        await OnDeleted.InvokeAsync(user);
+    }
+}

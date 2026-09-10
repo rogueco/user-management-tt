@@ -1,0 +1,66 @@
+@page "/logs"
+@inject LogsApi LogsApi
+@inject NavigationManager Navigation
+
+<PageTitle>Logs</PageTitle>
+
+<div class="page-header">
+    <h1 class="mdc-typography--headline5">Logs</h1>
+</div>
+
+<div class="toolbar">
+    <MBSelect @bind-Value="_action" @bind-Value:after="ReloadAsync" Items="_actionOptions" Label="Action" SelectInputStyle="@MBSelectInputStyle.Outlined" ItemValidation="@MBItemValidation.DefaultToFirst" />
+    <MBDebouncedTextField @bind-Value="_search" @bind-Value:after="ReloadAsync" Label="Name or email" TextInputStyle="@MBTextInputStyle.Outlined" DebounceInterval="400" />
+    @if (UserId is { } userId)
+    {
+        <MBButton Label="@($"Showing user {userId} only")" TrailingIcon="close" ButtonStyle="@MBButtonStyle.Outlined" @onclick="@(() => Navigation.NavigateTo("logs"))" />
+    }
+</div>
+
+<LogTable Items="_page.Items" Loading="_loading">
+    <Paginator>
+        <MBPaginator @bind-PageNumber="_pageNumber" @bind-PageNumber:after="ReloadAsync"
+                     @bind-ItemsPerPage="_pageSize" @bind-ItemsPerPage:after="ReloadAsync"
+                     ItemCount="_page.TotalCount" ItemsPerPageSelection="_pageSizes" />
+    </Paginator>
+</LogTable>
+
+@code {
+    private enum ActionOption { All, Created, Updated, Deleted }
+
+    private static readonly int[] _pageSizes = [10, 20, 50];
+    private static readonly MBSelectElement<ActionOption>[] _actionOptions =
+    [
+        new() { SelectedValue = ActionOption.All, Label = "All actions" },
+        new() { SelectedValue = ActionOption.Created, Label = "Created" },
+        new() { SelectedValue = ActionOption.Updated, Label = "Updated" },
+        new() { SelectedValue = ActionOption.Deleted, Label = "Deleted" },
+    ];
+
+    [SupplyParameterFromQuery] public long? UserId { get; set; }
+
+    private PagedResult<LogDto> _page = new([], 1, 1, 0);
+    private ActionOption _action = ActionOption.All;
+    private string _search = string.Empty;
+    private int _pageNumber;
+    private int _pageSize = 20;
+    private bool _loading = true;
+
+    protected override Task OnParametersSetAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        LogAction? actionType = _action switch
+        {
+            ActionOption.Created => LogAction.Created,
+            ActionOption.Updated => LogAction.Updated,
+            ActionOption.Deleted => LogAction.Deleted,
+            _ => null
+        };
+
+        _page = await LogsApi.GetPageAsync(UserId, actionType, string.IsNullOrWhiteSpace(_search) ? null : _search, _pageNumber + 1, _pageSize);
+        _pageNumber = _page.Page - 1;
+        _loading = false;
+    }
+}

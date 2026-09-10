@@ -1,0 +1,112 @@
+.loading {
+    padding: 48px;
+    text-align: center;
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.page {
+    padding: 24px;
+    max-width: 1200px;
+}
+
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.sample-links {
+    display: flex;
+    gap: 16px;
+}
+
+.page-header h1 {
+    margin: 0;
+}
+
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.form-grid {
+    display: grid;
+    gap: 16px;
+    min-width: 360px;
+    padding-top: 8px;
+}
+
+.mdc-data-table {
+    width: 100%;
+}
+
+.actions {
+    white-space: nowrap;
+}
+
+.empty {
+    padding: 24px;
+    color: rgba(0, 0, 0, 0.6);
+}
+
+dl.details {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 8px 24px;
+    margin: 0 0 16px;
+}
+
+dl.details dt {
+    font-weight: 500;
+}
+
+dl.details dd {
+    margin: 0;
+}
+
+.button-row {
+    display: flex;
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.validation-message {
+    color: #b00020;
+    font-size: 0.75rem;
+    margin: -8px 0 0 16px;
+}
+
+#blazor-error-ui {
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
+
+.progress-cell {
+    min-width: 220px;
+}
+
+.progress-cell span {
+    display: block;
+    font-size: 0.75rem;
+    color: rgba(0, 0, 0, 0.6);
+    margin-top: 4px;
+}

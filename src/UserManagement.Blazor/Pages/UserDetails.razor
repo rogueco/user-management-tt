@@ -1,0 +1,73 @@
+@page "/users/{Id:long}"
+@inject UsersApi UsersApi
+@inject LogsApi LogsApi
+@inject NavigationManager Navigation
+
+<PageTitle>User details</PageTitle>
+
+@if (_notFound)
+{
+    <h1 class="mdc-typography--headline5">User not found</h1>
+    <p>There is no user with id @Id.</p>
+    <MBButton Label="Back to users" ButtonStyle="@MBButtonStyle.Outlined" @onclick="@(() => Navigation.NavigateTo("users"))" />
+}
+else if (_user is { } user)
+{
+    <div class="page-header">
+        <h1 class="mdc-typography--headline5">@user.Forename @user.Surname</h1>
+    </div>
+
+    <dl class="details">
+        <dt>Id</dt><dd>@user.Id</dd>
+        <dt>Forename</dt><dd>@user.Forename</dd>
+        <dt>Surname</dt><dd>@user.Surname</dd>
+        <dt>Email</dt><dd>@user.Email</dd>
+        <dt>Date of Birth</dt><dd>@Formats.Date(user.DateOfBirth)</dd>
+        <dt>Account Active</dt><dd>@(user.IsActive ? "Yes" : "No")</dd>
+    </dl>
+
+    <div class="button-row">
+        <MBButton Label="Edit" LeadingIcon="edit" ButtonStyle="@MBButtonStyle.ContainedRaised" @onclick="@(() => _userDialog.EditAsync(user))" />
+        <MBButton Label="Delete" LeadingIcon="delete" ButtonStyle="@MBButtonStyle.Outlined" @onclick="@(() => _deleteDialog.ConfirmAsync(user))" />
+        <MBButton Label="Back to users" ButtonStyle="@MBButtonStyle.Text" @onclick="@(() => Navigation.NavigateTo("users"))" />
+    </div>
+
+    <h2 class="mdc-typography--headline6">Recent activity</h2>
+    <LogTable Items="_logs.Items" Loading="_loading" />
+    @if (_logs.TotalCount > _logs.Items.Count)
+    {
+        <p><a href="logs?userId=@user.Id">View all @_logs.TotalCount entries</a></p>
+    }
+
+    <UserDialog @ref="_userDialog" OnSaved="ReloadAsync" />
+    <DeleteDialog @ref="_deleteDialog" OnDeleted="@(_ => Navigation.NavigateTo("users"))" />
+}
+
+@code {
+    private const int RecentCount = 10;
+
+    [Parameter] public long Id { get; set; }
+
+    private UserDialog _userDialog = default!;
+    private DeleteDialog _deleteDialog = default!;
+    private UserDto? _user;
+    private PagedResult<LogDto> _logs = new([], 1, 1, 0);
+    private bool _loading = true;
+    private bool _notFound;
+
+    protected override Task OnParametersSetAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _user = await UsersApi.GetAsync(Id);
+        _notFound = _user is null;
+
+        if (_user is not null)
+        {
+            _logs = await LogsApi.GetPageAsync(Id, null, null, 1, RecentCount);
+        }
+
+        _loading = false;
+    }
+}

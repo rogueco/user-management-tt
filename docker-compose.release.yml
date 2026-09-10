@@ -1,0 +1,7 @@
+# Layered over docker-compose.yml on a deploy host: run the published images instead of building.
+#   IMAGE_REPOSITORY=ghcr.io/<owner>/<repo> IMAGE_TAG=<sha> docker compose -f docker-compose.yml -f docker-compose.release.yml up --detach --no-build
+services:
+  api:
+    image: ${IMAGE_REPOSITORY}/api:${IMAGE_TAG:-release-latest}
+  worker:
+    image: ${IMAGE_REPOSITORY}/worker:${IMAGE_TAG:-release-latest}

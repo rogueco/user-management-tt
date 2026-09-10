@@ -1,0 +1,156 @@
+@page "/imports"
+@implements IDisposable
+@inject ImportsApi ImportsApi
+@inject IMBToastService Toast
+
+<PageTitle>Imports</PageTitle>
+
+<div class="page-header">
+    <h1 class="mdc-typography--headline5">Import users</h1>
+    <span class="sample-links">
+        <a href="samples/users.csv" download>Sample CSV (10 users)</a>
+        <a href="samples/users-500.csv" download>Sample CSV (500 users)</a>
+    </span>
+</div>
+
+<p>Upload a CSV with the columns <code>Forename, Surname, Email, DateOfBirth, IsActive</code>. The import runs in the background and the list below refreshes until it finishes.</p>
+
+<div class="toolbar">
+    <MBFileUploadDragAndDrop Label="Drop a CSV here or click to choose" LeadingIcon="upload_file" accept=".csv,text/csv" OnLoadFiles="UploadAsync" />
+</div>
+
+<MBDataTable Items="_jobs" Context="job" HasProgressBar="true" ShowProgress="_loading" GetKeysFunc="@(j => j.Id)">
+    <TableHeader>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">File</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Submitted</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Status</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Rows</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Imported</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Failed</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col"></th>
+    </TableHeader>
+    <TableRow>
+        <td class="mdc-data-table__cell">@job.FileName</td>
+        <td class="mdc-data-table__cell">@Formats.Timestamp(job.CreatedAt)</td>
+        <td class="mdc-data-table__cell">@job.Status</td>
+        <td class="mdc-data-table__cell progress-cell">
+            @if (InFlight(job))
+            {
+                <MBLinearProgress LinearProgressType="@MBLinearProgressType.Indeterminate" />
+            }
+            else
+            {
+                <span>@job.TotalRows</span>
+            }
+        </td>
+        <td class="mdc-data-table__cell">@(job.ProcessedRows - job.FailedRows)</td>
+        <td class="mdc-data-table__cell">@job.FailedRows</td>
+        <td class="mdc-data-table__cell actions">
+            @if (job.Errors.Count > 0)
+            {
+                <MBIconButton Icon="@(_selected?.Id == job.Id ? "expand_less" : "expand_more")" Tooltip="Show errors" @onclick="@(() => _selected = _selected?.Id == job.Id ? null : job)" />
+            }
+        </td>
+    </TableRow>
+</MBDataTable>
+@if (!_loading && _jobs.Count == 0)
+{
+    <p class="empty">No imports yet.</p>
+}
+
+@if (_selected is { } selected)
+{
+    <h2 class="mdc-typography--headline6">Errors in @selected.FileName</h2>
+    <MBDataTable Items="selected.Errors" Context="error" GetKeysFunc="@(e => e.Row + e.Message)">
+        <TableHeader>
+            <th class="mdc-data-table__header-cell mdc-data-table__header-cell--numeric" role="columnheader" scope="col">Row</th>
+            <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Problem</th>
+        </TableHeader>
+        <TableRow>
+            <td class="mdc-data-table__cell mdc-data-table__cell--numeric">@error.Row</td>
+            <td class="mdc-data-table__cell">@error.Message</td>
+        </TableRow>
+    </MBDataTable>
+}
+
+@code {
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
+
+    private List<ImportJobDto> _jobs = [];
+    private ImportJobDto? _selected;
+    private bool _loading = true;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _polling;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        StartPollingIfNeeded();
+    }
+
+    private async Task UploadAsync(InputFileChangeEventArgs args)
+    {
+        try
+        {
+            var job = await ImportsApi.SubmitAsync(args.File);
+            Toast.ShowToast(MBToastLevel.Info, $"{job.FileName} queued for import.");
+            await ReloadAsync();
+            StartPollingIfNeeded();
+        }
+        catch (Exception exception)
+        {
+            Toast.ShowToast(MBToastLevel.Error, $"Upload failed: {exception.Message}");
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _jobs = (await ImportsApi.GetRecentAsync()).ToList();
+        _selected = _selected is { } s ? _jobs.FirstOrDefault(j => j.Id == s.Id) : null;
+        _loading = false;
+    }
+
+    // Poll while anything is still in flight, then stop.
+    private void StartPollingIfNeeded()
+    {
+        if (_polling is not null || !_jobs.Any(InFlight))
+        {
+            return;
+        }
+
+        _polling = new CancellationTokenSource();
+        _timer = new PeriodicTimer(PollInterval);
+        _ = PollAsync(_polling.Token);
+    }
+
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (await _timer!.WaitForNextTickAsync(cancellationToken))
+            {
+                await ReloadAsync();
+                StateHasChanged();
+
+                if (!_jobs.Any(InFlight))
+                {
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _timer?.Dispose();
+            _timer = null;
+            _polling = null;
+        }
+    }
+
+    private static bool InFlight(ImportJobDto job) => job.Status is ImportJobStatus.Pending or ImportJobStatus.Running;
+
+    public void Dispose() => _polling?.Cancel();
+}

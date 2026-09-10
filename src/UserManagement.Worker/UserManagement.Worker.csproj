@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <ItemGroup>
+    <ProjectReference Include="..\UserManagement.Messaging\UserManagement.Messaging.csproj" />
+    <ProjectReference Include="..\UserManagement.Repository.Sql\UserManagement.Repository.Sql.csproj" />
+    <ProjectReference Include="..\UserManagement.Services\UserManagement.Services.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+  </ItemGroup>
+
+</Project>

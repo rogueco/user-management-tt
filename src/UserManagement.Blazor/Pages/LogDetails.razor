@@ -1,0 +1,67 @@
+@page "/logs/{Id:long}"
+@inject LogsApi LogsApi
+@inject NavigationManager Navigation
+
+<PageTitle>Log entry</PageTitle>
+
+@if (_notFound)
+{
+    <h1 class="mdc-typography--headline5">Log entry not found</h1>
+    <p>There is no log entry with id @Id.</p>
+    <MBButton Label="Back to logs" ButtonStyle="@MBButtonStyle.Outlined" @onclick="@(() => Navigation.NavigateTo("logs"))" />
+}
+else if (_details is { } details)
+{
+    <div class="page-header">
+        <h1 class="mdc-typography--headline5">@details.Log.Action: @details.Log.UserName</h1>
+    </div>
+
+    <dl class="details">
+        <dt>When</dt><dd>@Formats.Timestamp(details.Log.Timestamp)</dd>
+        <dt>Action</dt><dd>@details.Log.Action</dd>
+        <dt>User</dt><dd>@details.Log.UserName (@details.Log.Email)</dd>
+        <dt>User Id</dt><dd>@details.Log.UserId</dd>
+    </dl>
+
+    <h2 class="mdc-typography--headline6">Changes</h2>
+    @if (details.Changes.Count == 0)
+    {
+        <p class="empty">No fields changed.</p>
+    }
+    else
+    {
+        <MBDataTable Items="details.Changes" Context="change" GetKeysFunc="@(c => c.Field)">
+            <TableHeader>
+                <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Field</th>
+                <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Before</th>
+                <th class="mdc-data-table__header-cell" role="columnheader" scope="col">After</th>
+            </TableHeader>
+            <TableRow>
+                <td class="mdc-data-table__cell">@change.Field</td>
+                <td class="mdc-data-table__cell">@change.Before</td>
+                <td class="mdc-data-table__cell">@change.After</td>
+            </TableRow>
+        </MBDataTable>
+    }
+
+    <div class="button-row">
+        <MBButton Label="Back to logs" ButtonStyle="@MBButtonStyle.Text" @onclick="@(() => Navigation.NavigateTo("logs"))" />
+        @if (details.UserExists)
+        {
+            <MBButton Label="View user" LeadingIcon="person" ButtonStyle="@MBButtonStyle.Outlined" @onclick="@(() => Navigation.NavigateTo($"users/{details.Log.UserId}"))" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public long Id { get; set; }
+
+    private LogDetailsDto? _details;
+    private bool _notFound;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _details = await LogsApi.GetAsync(Id);
+        _notFound = _details is null;
+    }
+}

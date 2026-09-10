@@ -1,3 +1,83 @@
+# User Management
+
+Tasks 1 to 4 were completed on the supplied MVC application; that version is in the git history (tag `tasks-1-4`).
+Task 5 re-implements it as a Blazor WebAssembly client over a versioned REST API, on a layered solution under
+`src/`, backed by PostgreSQL. Task 6 adds Redis caching, a RabbitMQ-driven worker for CSV imports, CI with a
+coverage floor, and CD from a release branch.
+
+## Running it
+
+Requires Docker with Compose v2 and `make`.
+
+```bash
+make up        # builds the images and starts Postgres, Redis, RabbitMQ, the API and a worker
+make down      # stops everything, keeps the data
+make reset     # stops everything and deletes the data
+```
+
+Once `make up` returns the API is healthy, migrated and seeded.
+
+| What | Where |
+| --- | --- |
+| Application | <http://localhost:8080> |
+| API reference (Swagger UI) | <http://localhost:8080/usermanagementapi> |
+| Health | <http://localhost:8080/health/ready> |
+| RabbitMQ management | <http://localhost:15672> (guest / guest) |
+
+Other targets: `make logs`, `make scale n=3` (more workers), `make psql`, `make redis`, `make test`, `make coverage`,
+`make migration name=...`.
+
+To run from source you need the .NET 10 SDK (`global.json` pins it). `dotnet run --project src/UserManagement.API`
+runs against the compose Postgres; without Redis or RabbitMQ configured the cache is in-process and imports run
+on an in-memory bus inside the API, which is also how the tests run.
+
+## Layout
+
+| Project | Purpose |
+| --- | --- |
+| `src/UserManagement.Domain` | `User`, `UserLog`, `ImportJob` and the change diff. No dependencies. |
+| `src/UserManagement.Contracts` | DTOs shared by the API and the Blazor client, with the validation attributes the forms use. |
+| `src/UserManagement.Services` | Application services returning `ServiceResult`, repository and unit-of-work interfaces, CSV parsing, the import processor, cache wiring. |
+| `src/UserManagement.Repository.Sql` | EF Core on Npgsql, migrations, seeding. |
+| `src/UserManagement.Messaging` | MassTransit with the transactional outbox, the import consumer. |
+| `src/UserManagement.API` | Versioned controllers under `Controllers/V1`, Swagger, health checks; hosts the compiled Blazor app. |
+| `src/UserManagement.Blazor` | Blazor WebAssembly with Material.Blazor. |
+| `src/UserManagement.Worker` | Consumes import messages from RabbitMQ. |
+| `tests/UserManagement.UnitTests` | Domain, services, controllers and extensions with Moq. |
+| `tests/UserManagement.IntegrationTests` | Repository and API tests against real Postgres and Redis through Testcontainers. |
+
+## CI and CD
+
+- Pull requests to `main` (`test-pr.yml`): build, every test with coverage, then two gates. Total line coverage
+  must stay above the floor in `.github/coverage-floor.txt` (currently 95%; nudge it up as coverage rises, or lower
+  it in the PR and say why), and the executable lines a PR adds must be at least 80% covered. A sticky comment on
+  the PR shows the total and the 20 least-covered classes. Both Docker images are built but not pushed.
+- Pushes to `main` (`test-main.yml`): the tests again, and an issue labelled `ci-failure` if they fail.
+- Pushes to `release` (`deploy.yml`): build and push the `api` and `worker` images to GHCR tagged with the short
+  SHA and `release-latest`, then roll them out over SSH with `docker-compose.release.yml` to the host behind the
+  `production` environment. The deploy job is skipped until the repository variable `DEPLOY_HOST` is set; it also
+  needs the secrets `DEPLOY_USER` and `DEPLOY_SSH_KEY`, optionally `DEPLOY_PATH` and `SMOKE_URL`, and a host that
+  is logged in to GHCR with a `.env` holding the real credentials.
+
+Coverage leaves out the Blazor client, the worker host, EF migrations and DI wiring marked `ExcludeFromCodeCoverage`
+(`tests/coverlet.runsettings`). `make coverage` produces the same numbers locally with an HTML report.
+
+## Decisions worth knowing
+
+- Services return a `ServiceResult` and one extension, `ServiceResultToActionResult`, maps it to a status code, so
+  controllers stay thin and unhandled exceptions become ProblemDetails through the exception handler.
+- Every create, update and delete is audited through the services; the log entry and the change commit in one
+  transaction, and log entries have no foreign key so they outlive the user.
+- A CSV import is accepted immediately, the job and its message commit together through the MassTransit outbox,
+  and a worker processes rows through the same service the UI uses, so imported users are audited too. The
+  consumer runs inside the inbox transaction, so a job is applied all or nothing and a crash mid-import is
+  retried rather than leaving a half-imported file; the trade-off is that row progress is not visible until it finishes.
+- Reads of users are cached with HybridCache, in-process plus Redis. HybridCache tag invalidation is per process,
+  so writes made by the API are visible at once and writes made by the worker are visible within ten seconds.
+  A message-based backplane would remove that window and was deliberately not built.
+
+---
+
 # User Management Technical Exercise
 
 The exercise is an ASP.NET Core web application backed by Entity Framework Core, which faciliates management of some fictional users.

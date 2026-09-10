@@ -1,0 +1,106 @@
+@inject UsersApi UsersApi
+@inject IMBToastService Toast
+
+<MBDialog @ref="_dialog" Title="@_title" ScrimClickAction="" EscapeKeyAction="">
+    <Body>
+        <EditForm EditContext="_editContext" OnValidSubmit="SaveAsync" id="user-form">
+            <DataAnnotationsValidator />
+            <div class="form-grid">
+                <MBTextField @bind-Value="_request.Forename" Label="Forename" TextInputStyle="@MBTextInputStyle.Outlined" ValidationMessageFor="@(() => _request.Forename)" />
+                <MBTextField @bind-Value="_request.Surname" Label="Surname" TextInputStyle="@MBTextInputStyle.Outlined" ValidationMessageFor="@(() => _request.Surname)" />
+                <MBTextField @bind-Value="_request.Email" Label="Email" TextInputStyle="@MBTextInputStyle.Outlined" ValidationMessageFor="@(() => _request.Email)" />
+                <div>
+                    <MBDatePicker @bind-Value="DateOfBirth" Label="Date of Birth" DateFormat="dd/MM/yyyy" SelectInputStyle="@MBSelectInputStyle.Outlined" MinDate="_minDate" MaxDate="_maxDate" SuppressDefaultDate="true" />
+                    <ValidationMessage For="@(() => _request.DateOfBirth)" />
+                </div>
+                <MBSwitch @bind-Value="_request.IsActive" Label="Account active" />
+            </div>
+        </EditForm>
+    </Body>
+    <Buttons>
+        <MBButton Label="Cancel" ButtonStyle="@MBButtonStyle.Text" DialogAction="cancel" />
+        <MBButton Label="Save" ButtonStyle="@MBButtonStyle.ContainedRaised" type="submit" form="user-form" />
+    </Buttons>
+</MBDialog>
+
+@code {
+    private static readonly DateTime _minDate = new(1900, 1, 1);
+    private static readonly DateTime _maxDate = DateTime.Today;
+
+    private MBDialog _dialog = default!;
+    private UserRequest _request = new();
+    private EditContext _editContext = default!;
+    private ValidationMessageStore _serverErrors = default!;
+    private long? _id;
+    private string _title = "Add user";
+
+    [Parameter] public EventCallback<UserDto> OnSaved { get; set; }
+
+    private DateTime DateOfBirth
+    {
+        get => _request.DateOfBirth?.ToDateTime(TimeOnly.MinValue) ?? default;
+        set => _request.DateOfBirth = value == default ? null : DateOnly.FromDateTime(value);
+    }
+
+    protected override void OnInitialized() => Reset(new UserRequest());
+
+    public Task AddAsync()
+    {
+        _id = null;
+        _title = "Add user";
+        Reset(new UserRequest { IsActive = true });
+        return _dialog.ShowAsync();
+    }
+
+    public Task EditAsync(UserDto user)
+    {
+        _id = user.Id;
+        _title = $"Edit {user.Forename} {user.Surname}";
+        Reset(new UserRequest
+        {
+            Forename = user.Forename,
+            Surname = user.Surname,
+            Email = user.Email,
+            DateOfBirth = user.DateOfBirth,
+            IsActive = user.IsActive
+        });
+        return _dialog.ShowAsync();
+    }
+
+    private void Reset(UserRequest request)
+    {
+        _request = request;
+        _editContext = new EditContext(_request);
+        _serverErrors = new ValidationMessageStore(_editContext);
+        _editContext.OnFieldChanged += (_, _) => _serverErrors.Clear();
+    }
+
+    private async Task SaveAsync()
+    {
+        var result = _id is { } id
+            ? await UsersApi.UpdateAsync(id, _request)
+            : await UsersApi.CreateAsync(_request);
+
+        if (result.NotFound)
+        {
+            Toast.ShowToast(MBToastLevel.Error, "That user no longer exists.");
+            await _dialog.HideAsync();
+            return;
+        }
+
+        if (!result.Succeeded)
+        {
+            foreach (var (field, messages) in result.Errors)
+            {
+                _serverErrors.Add(_editContext.Field(field), messages);
+            }
+
+            _editContext.NotifyValidationStateChanged();
+            return;
+        }
+
+        await _dialog.HideAsync();
+        Toast.ShowToast(MBToastLevel.Success, $"{result.Value!.Forename} {result.Value.Surname} was {(_id is null ? "added" : "updated")}.");
+        await OnSaved.InvokeAsync(result.Value);
+    }
+}

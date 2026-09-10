@@ -1,0 +1,28 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+
+<MBDrawer @ref="_drawer" IsDismissible="true" StartOpen="true">
+    <nav class="mdc-list">
+        <MBListItem LeadingIcon="people" Label="Users" @onclick="@(() => Go("users"))" />
+        <MBListItem LeadingIcon="history" Label="Logs" @onclick="@(() => Go("logs"))" />
+        <MBListItem LeadingIcon="upload_file" Label="Imports" @onclick="@(() => Go("imports"))" />
+    </nav>
+</MBDrawer>
+<div class="mdc-drawer-app-content">
+    <MBTopAppBar Title="User Management" NavIcon="menu" ScrollTarget="#main-content" @onclick="@(() => _drawer.Toggle())" />
+    <main class="mdc-top-app-bar--fixed-adjust" id="main-content">
+        <div class="page">
+            @Body
+        </div>
+    </main>
+</div>
+
+@code {
+    private MBDrawer _drawer = default!;
+
+    private void Go(string route)
+    {
+        _drawer.NotifyNavigation();
+        Navigation.NavigateTo(route);
+    }
+}

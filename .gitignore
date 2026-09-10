@@ -246,3 +246,6 @@ ModelManifest.xml
 
 # Inflo Custom Ignores
 **/*.js.map
+
+# Local environment overrides for compose
+.env

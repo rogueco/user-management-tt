@@ -1,0 +1,11 @@
+Forename,Surname,Email,DateOfBirth,IsActive
+Ada,Lovelace,ada.lovelace@example.com,1985-12-10,true
+Alan,Turing,alan.turing@example.com,1982-06-23,true
+Grace,Hopper,grace.hopper@example.com,1979-12-09,false
+Edsger,Dijkstra,edsger.dijkstra@example.com,1990-05-11,true
+Barbara,Liskov,barbara.liskov@example.com,1989-11-07,true
+Linus,Torvalds,not-an-email,1969-12-28,true
+Margaret,Hamilton,margaret.hamilton@example.com,2099-08-17,true
+Dennis,Ritchie,dennis.ritchie@example.com,1971-09-09,maybe
+,Kay,alan.kay@example.com,1975-05-17,true
+Ken,Thompson,ken.thompson@example.com,1983-02-04,false

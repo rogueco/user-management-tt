@@ -1,0 +1,87 @@
+@page "/"
+@page "/users"
+@inject UsersApi UsersApi
+@inject NavigationManager Navigation
+
+<PageTitle>Users</PageTitle>
+
+<div class="page-header">
+    <h1 class="mdc-typography--headline5">Users</h1>
+    <MBButton Label="Add user" LeadingIcon="add" ButtonStyle="@MBButtonStyle.ContainedRaised" @onclick="@(() => _userDialog.AddAsync())" />
+</div>
+
+<div class="toolbar">
+    <MBSegmentedButtonSingle @bind-Value="_filter" @bind-Value:after="ReloadAsync" Items="_filterOptions" />
+</div>
+
+<MBDataTable Items="_page.Items" Context="user" HasProgressBar="true" ShowProgress="_loading" GetKeysFunc="@(u => u.Id)">
+    <TableHeader>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Id</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Name</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Email</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Date of Birth</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col">Active</th>
+        <th class="mdc-data-table__header-cell" role="columnheader" scope="col"></th>
+    </TableHeader>
+    <TableRow>
+        <td class="mdc-data-table__cell">@user.Id</td>
+        <td class="mdc-data-table__cell">@user.Forename @user.Surname</td>
+        <td class="mdc-data-table__cell">@user.Email</td>
+        <td class="mdc-data-table__cell">@Formats.Date(user.DateOfBirth)</td>
+        <td class="mdc-data-table__cell">@(user.IsActive ? "Yes" : "No")</td>
+        <td class="mdc-data-table__cell actions">
+            <MBIconButton Icon="visibility" Tooltip="View" @onclick="@(() => Navigation.NavigateTo($"users/{user.Id}"))" />
+            <MBIconButton Icon="edit" Tooltip="Edit" @onclick="@(() => _userDialog.EditAsync(user))" />
+            <MBIconButton Icon="delete" Tooltip="Delete" @onclick="@(() => _deleteDialog.ConfirmAsync(user))" />
+        </td>
+    </TableRow>
+    <Paginator>
+        <MBPaginator @bind-PageNumber="_pageNumber" @bind-PageNumber:after="ReloadAsync"
+                     @bind-ItemsPerPage="_pageSize" @bind-ItemsPerPage:after="ReloadAsync"
+                     ItemCount="_page.TotalCount" ItemsPerPageSelection="_pageSizes" />
+    </Paginator>
+</MBDataTable>
+@if (!_loading && _page.Items.Count == 0)
+{
+    <p class="empty">No users match this filter.</p>
+}
+
+<UserDialog @ref="_userDialog" OnSaved="ReloadAsync" />
+<DeleteDialog @ref="_deleteDialog" OnDeleted="ReloadAsync" />
+
+@code {
+    private enum FilterOption { All, Active, Inactive }
+
+    private static readonly int[] _pageSizes = [10, 20, 50];
+    private static readonly MBIconBearingSelectElement<FilterOption>[] _filterOptions =
+    [
+        new() { SelectedValue = FilterOption.All, Label = "All", Icon = "list" },
+        new() { SelectedValue = FilterOption.Active, Label = "Active", Icon = "check_circle" },
+        new() { SelectedValue = FilterOption.Inactive, Label = "Inactive", Icon = "block" },
+    ];
+
+    private UserDialog _userDialog = default!;
+    private DeleteDialog _deleteDialog = default!;
+    private PagedResult<UserDto> _page = new([], 1, 1, 0);
+    private FilterOption _filter = FilterOption.All;
+    private int _pageNumber;
+    private int _pageSize = 20;
+    private bool _loading = true;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        bool? isActive = _filter switch
+        {
+            FilterOption.Active => true,
+            FilterOption.Inactive => false,
+            _ => null
+        };
+
+        _page = await UsersApi.GetPageAsync(isActive, _pageNumber + 1, _pageSize);
+        _pageNumber = _page.Page - 1;
+        _loading = false;
+    }
+}
