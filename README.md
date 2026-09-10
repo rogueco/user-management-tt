@@ -8,7 +8,7 @@ coverage floor, and CD from a release branch.
 
 ## Running it
 
-Requires Docker with Compose v2 and `make`.
+Requires Docker with Compose v2. `make` is optional; every target is a thin wrapper over `docker compose`.
 
 ```bash
 make up        # builds the images and starts Postgres, Redis, RabbitMQ, the API and a worker
@@ -16,7 +16,15 @@ make down      # stops everything, keeps the data
 make reset     # stops everything and deletes the data
 ```
 
-Once `make up` returns the API is healthy, migrated and seeded.
+Without `make`, the same three are:
+
+```bash
+docker compose up --build --detach --wait
+docker compose down
+docker compose down --volumes
+```
+
+Once the stack is up the API is healthy, migrated and seeded.
 
 | What | Where |
 | --- | --- |
@@ -31,7 +39,8 @@ Other targets: `make logs`, `make scale n=3` (more workers), `make psql`, `make 
 To see the queue and worker in action, open the Imports page, download one of the sample CSVs it links to
 (10 users, or 500 users, both under `src/UserManagement.Blazor/wwwroot/samples`) and upload it. The job is
 accepted immediately, the `ImportRequested` queue in RabbitMQ management shows the message being consumed,
-`make worker-logs` shows the worker processing it, and the page polls until the job completes. Rows that fail
+`make worker-logs` (or `docker compose logs --follow worker`) shows the worker processing it, and the page polls
+until the job completes. Rows that fail
 validation are listed against their row number; both users and log entries then show the imported users.
 
 To run from source you need the .NET 10 SDK (`global.json` pins it). `dotnet run --project src/UserManagement.API`
